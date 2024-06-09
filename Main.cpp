@@ -15,6 +15,7 @@ int main()
 
 void TestSparseSetInit()
 {
+    //test
     Internal::SparseSet<int> set{ 20 };
 
     std::cout << "Size: " << set.Size() << "\n";
