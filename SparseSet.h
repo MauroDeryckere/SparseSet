@@ -33,30 +33,31 @@ namespace Internal
 		~SparseSet() = default;
 
 		[[nodiscard]] size_t Size() const noexcept { return m_DenseArr.size(); }
+		[[nodiscard]] size_t SparseSize() const noexcept { return m_SparseArr.size(); }
 
-		[[nodiscard]] bool Contains(KeyType element) const noexcept { element < m_SparseArr.size() && m_SparseArr[element] != INVALID_INDEX; }
+		[[nodiscard]] bool Contains(KeyType element) const noexcept { return element < m_SparseArr.size() && m_SparseArr[element] != INVALID_INDEX; }
 
 		template<typename... Args>
 		requires std::is_constructible_v<Val, Args...>
 		Val& Emplace(KeyType element, Args&&... args) noexcept
 		{
-			assert(!Contains(element) && "The sparsetalready contains a value for" + std::to_string(element) );
+			assert(!Contains(element));
 
 			if (element >= m_SparseArr.size())
 			{
 				m_SparseArr.resize(element + 1, INVALID_INDEX);
 			}
 
-			m_SparseArr[element] = m_DenseArr.size();
+			m_SparseArr[element] = static_cast<KeyType>(m_DenseArr.size());
 
 			m_DenseArr.emplace_back(element);
 			return m_PackedValArr.emplace_back(std::forward<Args>(args)...);
 		}
 
-		bool Remove(KeyType element) noexcept
-		{
+		//bool Remove(KeyType element) noexcept
+		//{
 
-		}
+		//}
 
 	private:
 		static constexpr KeyType INVALID_INDEX = std::numeric_limits<KeyType>::max();
