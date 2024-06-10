@@ -23,5 +23,8 @@
     <ClInclude Include="SparseSet.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="InternalAssert.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
