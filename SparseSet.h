@@ -18,15 +18,14 @@ namespace Internal
 						&& std::is_trivially_copyable_v<T> && std::is_swappable_v<T>; //erase function
 
 		template<typename T>
-		concept MoveAssignmentVal = std::is_move_assignable_v<T>;
+		concept MoveAssignmentVal = std::is_nothrow_move_assignable_v<T>;
 
 		//We only want to move construct when we arent able to move assign
 		template<typename T>
-		concept MoveConstructVal = !MoveAssignmentVal<T> && std::is_move_constructible_v<T>;
+		concept MoveConstructVal = !MoveAssignmentVal<T> && std::is_nothrow_move_constructible_v<T> && std::is_nothrow_destructible_v<T>;
 
 		template<typename T>
-		concept ValType = std::is_nothrow_destructible_v<T> 
-						&& (MoveAssignmentVal<T> || MoveConstructVal<T>);
+		concept ValType =  (std::is_trivially_copyable_v<T> || MoveAssignmentVal<T> || MoveConstructVal<T>);
 	}
 
 	template<Impl::ValType Val, Impl::KeyType KeyType = uint32_t>
@@ -104,9 +103,11 @@ namespace Internal
 		{
 			ASSERT(contains(element), "Element not in set!");
 
-			//const auto last{ m_DenseArr.back() };
-
-			if constexpr(Impl::MoveAssignmentVal<Val>)
+			if constexpr (std::is_trivially_copyable_v<Val>)
+			{
+				std::memcpy(&m_PackedValArr[m_SparseArr[element]], &m_PackedValArr.back(), sizeof(Val));
+			}
+			else if constexpr(Impl::MoveAssignmentVal<Val>)
 			{
 				m_PackedValArr[m_SparseArr[element]] = std::move(m_PackedValArr.back());
 			}
@@ -117,8 +118,6 @@ namespace Internal
 			}
 
 			m_DenseArr[m_SparseArr[element]] = m_DenseArr.back();
-
-			//std::swap(m_SparseArr[last], m_SparseArr[element]);
 			m_SparseArr[element] = INVALID_INDEX;
 			
 			m_DenseArr.pop_back();
