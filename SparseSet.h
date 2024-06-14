@@ -55,6 +55,18 @@ namespace Internal
 	{
 	public:
 		sparse_set() = default;
+
+		sparse_set(std::initializer_list<std::pair<KeyType, Val&&>> initList, KeyType reserveSize = 0)
+		{
+			sparse_reserve(static_cast<KeyType>(initList.size()));
+			reserve(reserveSize);
+
+			for (auto&& pair : initList)
+			{
+				emplace(pair.first, std::forward<Val>(pair.second));
+			}
+		}
+
 		sparse_set(KeyType sparseSize, KeyType reserveSize = 0):
 			m_SparseArr(sparseSize, INVALID_INDEX)
 		{ 
@@ -62,6 +74,13 @@ namespace Internal
 		}
 
 		~sparse_set() = default;
+
+		void swap(sparse_set& other) noexcept
+		{
+			std::swap(m_SparseArr, other.m_SparseArr);
+			std::swap(m_DenseArr, other.m_DenseArr);
+			std::swap(m_PackedValArr, other.m_PackedValArr);
+		}
 
 		using key_type = KeyType;
 		using dense_type = KeyType;
@@ -90,6 +109,20 @@ namespace Internal
 
 		[[nodiscard]] size_t size() const noexcept { return m_DenseArr.size(); }
 		[[nodiscard]] size_t sparse_size() const noexcept { return m_SparseArr.size(); }
+		
+		static constexpr KeyType max_sparse_size() noexcept
+		{
+			return INVALID_INDEX - 1;
+		}
+
+		void resize(KeyType newSize, KeyType reserveSize = 0) noexcept
+		{
+			ASSERT(newSize > m_SparseArr.size(), "");
+
+			m_SparseArr.resize(newSize, INVALID_INDEX);
+			m_DenseArr.reserve(reserveSize);
+			m_PackedValArr.reserve(reserveSize);
+		}
 
 		void shrink_to_fit() noexcept 
 		{

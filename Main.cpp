@@ -27,6 +27,15 @@ void TestSparseSetInit()
 
     std::cout << "Size: " << set.size() << "\n";
     std::cout << "Sparse Size: " << set.sparse_size() << "\n";
+    std::cout << "Max Sparse Size: " << set.max_sparse_size() << "\n";
+
+    std::cout << "\n";
+
+    Internal::sparse_set<int> set2{ {1, 10}, {2, 20} };
+    for (auto&& val : set2)
+    {
+        std::cout << val << "\n";
+    }
 }
 
 void TestSparseSetEmplace()
@@ -97,12 +106,29 @@ void TestSparseSetErase()
     set.emplace(3, 400);
     set.emplace(4, 500);
 
-    set.erase(set.begin(), set.begin() + 1);
+    auto it = set.erase(set.begin(), set.begin() + 1);
     std::cout << std::boolalpha << set.contains(0) << "\n";
     std::cout << std::boolalpha << set.contains(1) << "\n";
     std::cout << std::boolalpha << set.contains(2) << "\n";
     std::cout << std::boolalpha << set.contains(3) << "\n";
     std::cout << std::boolalpha << set.contains(4) << "\n";
+
+    set.clear();
+    set.shrink_to_fit();
+
+    //std::cout << "\n\n\n";
+    //set.emplace(0, 100);
+    //set.emplace(1, 200);
+    //set.emplace(2, 300);
+    //set.emplace(3, 400);
+    //set.emplace(4, 500);
+
+    //for (auto&& val : set)
+    //{
+    //    std::cout << val << "\n";
+    //}
+
+    //std::cout << "\n";
 }
 
 void TestSparseSetIteration()
