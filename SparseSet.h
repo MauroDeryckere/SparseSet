@@ -54,9 +54,9 @@ namespace Internal
 	class sparse_set final
 	{
 	public:
-		sparse_set() = default;
+		sparse_set() noexcept = default;
 
-		sparse_set(std::initializer_list<std::pair<KeyType, Val&&>> initList, KeyType reserveSize = 0)
+		sparse_set(std::initializer_list<std::pair<KeyType, Val&&>> initList, KeyType reserveSize = 0) noexcept
 		{
 			sparse_reserve(static_cast<KeyType>(initList.size()));
 			reserve(reserveSize);
@@ -67,19 +67,94 @@ namespace Internal
 			}
 		}
 
-		sparse_set(KeyType sparseSize, KeyType reserveSize = 0):
+		sparse_set(KeyType sparseSize, KeyType reserveSize = 0) noexcept :
 			m_SparseArr(sparseSize, INVALID_INDEX)
 		{ 
 			reserve(reserveSize);
 		}
 
-		~sparse_set() = default;
+		~sparse_set() noexcept = default;
+
+		sparse_set(const sparse_set& other) noexcept :
+			m_SparseArr{ other.m_SparseArr },
+			m_PackedValArr{ other.m_PackedValArr },
+			m_DenseArr{ other.m_DenseArr }
+		{ }
+
+		sparse_set& operator=(const sparse_set& other) noexcept
+		{
+			m_SparseArr = other.m_SparseArr;
+			m_PackedValArr = other.m_PackedValArr;
+			m_DenseArr = other.m_DenseArr;
+
+			return *this;
+		}
+
+		sparse_set(sparse_set&& other) noexcept :
+			m_SparseArr{ std::move(other.m_SparseArr) },
+			m_PackedValArr{ std::move(other.m_PackedValArr) },
+			m_DenseArr{ std::move(other.m_DenseArr) }
+		{ }
+
+		sparse_set& operator=(sparse_set&& other) noexcept 
+		{
+			m_SparseArr = std::move(other.m_SparseArr);
+			m_PackedValArr = std::move(other.m_PackedValArr);
+			m_DenseArr = std::move(other.m_DenseArr);
+
+			return *this;
+		}
 
 		void swap(sparse_set& other) noexcept
 		{
 			std::swap(m_SparseArr, other.m_SparseArr);
 			std::swap(m_DenseArr, other.m_DenseArr);
 			std::swap(m_PackedValArr, other.m_PackedValArr);
+		}
+
+	public:
+		[[nodiscard]] size_t size() const noexcept { return m_DenseArr.size(); }
+		[[nodiscard]] size_t sparse_size() const noexcept { return m_SparseArr.size(); }
+
+		[[nodiscard]] static constexpr KeyType max_sparse_size() noexcept
+		{
+			return INVALID_INDEX - 1;
+		}
+
+		void resize(KeyType newSize, KeyType reserveSize = 0) noexcept
+		{
+			ASSERT(newSize > m_SparseArr.size(), "");
+
+			m_SparseArr.resize(newSize, INVALID_INDEX);
+			m_DenseArr.reserve(reserveSize);
+			m_PackedValArr.reserve(reserveSize);
+		}
+
+		void shrink_to_fit() noexcept
+		{
+			m_SparseArr.shrink_to_fit();
+			m_DenseArr.shrink_to_fit();
+			m_PackedValArr.shrink_to_fit();
+		}
+
+		void sparse_reserve(KeyType newCap) noexcept
+		{
+			m_SparseArr.reserve(newCap);
+		}
+
+		void reserve(KeyType newCap) noexcept
+		{
+			m_DenseArr.reserve(newCap);
+			m_PackedValArr.reserve(newCap);
+		}
+
+		[[nodiscard]] bool empty() const noexcept { return m_DenseArr.empty(); }
+
+		void clear() noexcept
+		{
+			m_DenseArr.clear();
+			m_PackedValArr.clear();
+			m_SparseArr.clear();
 		}
 
 		using key_type = KeyType;
@@ -106,50 +181,6 @@ namespace Internal
 		const_iterator cend() const noexcept { return m_PackedValArr.cend(); }
 		const_reserve_iterator crbegin() const noexcept { return m_PackedValArr.crbegin(); }
 		const_reserve_iterator crend() const noexcept { return m_PackedValArr.crend(); }
-
-		[[nodiscard]] size_t size() const noexcept { return m_DenseArr.size(); }
-		[[nodiscard]] size_t sparse_size() const noexcept { return m_SparseArr.size(); }
-		
-		static constexpr KeyType max_sparse_size() noexcept
-		{
-			return INVALID_INDEX - 1;
-		}
-
-		void resize(KeyType newSize, KeyType reserveSize = 0) noexcept
-		{
-			ASSERT(newSize > m_SparseArr.size(), "");
-
-			m_SparseArr.resize(newSize, INVALID_INDEX);
-			m_DenseArr.reserve(reserveSize);
-			m_PackedValArr.reserve(reserveSize);
-		}
-
-		void shrink_to_fit() noexcept 
-		{
-			m_SparseArr.shrink_to_fit();
-			m_DenseArr.shrink_to_fit();
-			m_PackedValArr.shrink_to_fit();
-		}
-
-		void sparse_reserve(KeyType newCap) noexcept
-		{
-			m_SparseArr.reserve(newCap);
-		}
-
-		void reserve(KeyType newCap) noexcept 
-		{
-			m_DenseArr.reserve(newCap);
-			m_PackedValArr.reserve(newCap);
-		}
-
-		[[nodiscard]] bool empty() const noexcept { return m_DenseArr.empty(); }
-
-		void clear() noexcept
-		{
-			m_DenseArr.clear();
-			m_PackedValArr.clear();
-			m_SparseArr.clear();
-		}
 
 	public:
 		[[nodiscard]] bool contains(KeyType element) const noexcept { return element < m_SparseArr.size() && m_SparseArr[element] != INVALID_INDEX; }
@@ -199,6 +230,14 @@ namespace Internal
 				return m_PackedValArr.cbegin() + m_SparseArr[key];
 			}
 			return m_PackedValArr.cend();
+		}		
+		iterator find(KeyType key) noexcept
+		{
+			if (contains(key))
+			{
+				return m_PackedValArr.begin() + m_SparseArr[key];
+			}
+			return m_PackedValArr.end();
 		}
 
 	public:
@@ -275,18 +314,18 @@ namespace Internal
 		}
 
 		//Do not erase with iterator that's out of bounds
-		const_iterator erase(const_iterator pos) noexcept
+		iterator erase(const_iterator pos) noexcept
 		{
-			ASSERT(!(pos >= cend() && pos < cbegin()), "Iterator out of bounds!");
+			ASSERT(!(pos >= end() && pos < begin()), "Iterator out of bounds!");
 
 			const auto distance{ std::distance(cbegin(), pos) };
 			erase(m_DenseArr[val_index(pos)]);
 
-			return cbegin() + distance;
+			return begin() + distance;
 		}
 
 		//Do not erase with iterator range that's out of bounds
-		const_iterator erase(const_iterator first, const_iterator last) noexcept
+		iterator erase(const_iterator first, const_iterator last) noexcept
 		{
 			ASSERT(!(last > cend() || first < cbegin()) && first < last, "Iterator out of bounds!");
 			ASSERT(first != last, "First == last erases nothing!");

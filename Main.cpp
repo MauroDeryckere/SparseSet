@@ -36,6 +36,20 @@ void TestSparseSetInit()
     {
         std::cout << val << "\n";
     }
+
+    std::cout << "\n";
+
+    //Internal::sparse_set<int> set3{};
+    //set3 = set2;
+    //set3 = std::move(set2);
+    
+    //auto set3{ set2 };
+    auto set3{ std::move(set2) };
+    
+    for (auto&& val : set3)
+    {
+        std::cout << val << "\n";
+    }
 }
 
 void TestSparseSetEmplace()
