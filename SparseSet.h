@@ -6,6 +6,8 @@
 #include <type_traits>
 #include <limits>
 #include <utility>
+#include <stdexcept>
+#include <string>
 
 #include "InternalAssert.h"
 
@@ -28,35 +30,86 @@ namespace Internal
 		concept ValType =  (std::is_trivially_copyable_v<T> || MoveAssignmentVal<T> || MoveConstructVal<T>);
 	}
 
+	template<Impl::KeyType KeyType>
+	class sparse_set_out_of_range : public std::out_of_range
+	{
+	public:
+		sparse_set_out_of_range(std::string_view message, KeyType element) :
+			std::out_of_range{ message.data() },
+			m_Element{ element }
+		{ }
+
+		~sparse_set_out_of_range() = default;
+
+		[[nodiscard]] KeyType element() const noexcept
+		{
+			return m_Element;
+		}
+
+	private:
+		const KeyType m_Element;
+	};
+
 	template<Impl::ValType Val, Impl::KeyType KeyType = uint32_t>
 	class sparse_set final
 	{
 	public:
 		sparse_set() = default;
-		sparse_set(KeyType sparseSize) :
+		sparse_set(KeyType sparseSize, KeyType reserveSize = 0):
 			m_SparseArr(sparseSize, INVALID_INDEX)
-		{ }
+		{ 
+			reserve(reserveSize);
+		}
 
 		~sparse_set() = default;
 
-		using Iterator = typename std::vector<Val>::iterator;
-		using ConstIterator = typename std::vector<Val>::const_iterator;
+		using key_type = KeyType;
+		using dense_type = KeyType;
+		using value_type = Val;
+
+		using iterator = typename std::vector<Val>::iterator;
+		using const_iterator = typename std::vector<Val>::const_iterator;
 		
-		using ReverseIterator = typename std::vector<Val>::reverse_iterator;
-		using ConstReverseIterator = typename std::vector<Val>::const_reverse_iterator;
+		using reverse_iterator = typename std::vector<Val>::reverse_iterator;
+		using const_reserve_iterator = typename std::vector<Val>::const_reverse_iterator;
 
-		Iterator begin() noexcept { return m_PackedValArr.begin(); }
-		Iterator end() noexcept { return m_PackedValArr.end(); }
-		ConstIterator begin() const noexcept { return m_PackedValArr.begin(); }
-		ConstIterator end() const noexcept { return m_PackedValArr.end(); }
+		iterator begin() noexcept { return m_PackedValArr.begin(); }
+		iterator end() noexcept { return m_PackedValArr.end(); }
+		const_iterator begin() const noexcept { return m_PackedValArr.begin(); }
+		const_iterator end() const noexcept { return m_PackedValArr.end(); }
 
-		ReverseIterator rbegin() noexcept { return m_PackedValArr.rbegin(); }
-		ReverseIterator rend() noexcept { return m_PackedValArr.rend(); }
-		ConstReverseIterator rbegin() const noexcept { return m_PackedValArr.rbegin(); }
-		ConstReverseIterator rend() const noexcept { return m_PackedValArr.rend(); }
+		reverse_iterator rbegin() noexcept { return m_PackedValArr.rbegin(); }
+		reverse_iterator rend() noexcept { return m_PackedValArr.rend(); }
+		const_reserve_iterator rbegin() const noexcept { return m_PackedValArr.rbegin(); }
+		const_reserve_iterator rend() const noexcept { return m_PackedValArr.rend(); }
+
+		const_iterator cbegin() const noexcept { return m_PackedValArr.cbegin(); }
+		const_iterator cend() const noexcept { return m_PackedValArr.cend(); }
+		const_reserve_iterator crbegin() const noexcept { return m_PackedValArr.crbegin(); }
+		const_reserve_iterator crend() const noexcept { return m_PackedValArr.crend(); }
 
 		[[nodiscard]] size_t size() const noexcept { return m_DenseArr.size(); }
 		[[nodiscard]] size_t sparse_size() const noexcept { return m_SparseArr.size(); }
+
+		void shrink_to_fit() noexcept 
+		{
+			m_SparseArr.shrink_to_fit();
+			m_DenseArr.shrink_to_fit();
+			m_PackedValArr.shrink_to_fit();
+		}
+
+		void sparse_reserve(KeyType newCap) noexcept
+		{
+			m_SparseArr.reserve(newCap);
+		}
+
+		void reserve(KeyType newCap) noexcept 
+		{
+			m_DenseArr.reserve(newCap);
+			m_PackedValArr.reserve(newCap);
+		}
+
+		[[nodiscard]] bool empty() const noexcept { return m_DenseArr.empty(); }
 
 		void clear() noexcept
 		{
@@ -65,8 +118,57 @@ namespace Internal
 			m_SparseArr.clear();
 		}
 
+	public:
 		[[nodiscard]] bool contains(KeyType element) const noexcept { return element < m_SparseArr.size() && m_SparseArr[element] != INVALID_INDEX; }
 
+		//Iterator must be in bounds to get a valid value
+		template <typename IteratorType>
+		[[nodiscard]] KeyType sparse_index(IteratorType it) const noexcept
+		{
+			ASSERT(contains(m_DenseArr[val_index(it)]), "");
+			return m_DenseArr[val_index(it)];
+		}
+		
+		//Element must exist to get a valid value
+		Val& operator[](KeyType element) noexcept
+		{
+			ASSERT(contains(element), "Element not in set!");
+			return m_PackedValArr[m_SparseArr[element]];
+		}
+		const Val& operator[](KeyType element) const noexcept
+		{
+			ASSERT(contains(element), "Element not in set!");
+			return m_PackedValArr[m_SparseArr[element]];
+		}
+
+		//Random access with bounds checking (similar to std::vector:::at())
+		Val& at(KeyType element)
+		{
+			if (contains(element))
+			{
+				return m_PackedValArr[m_SparseArr[element]];
+			}
+			throw sparse_set_out_of_range( "Element not found in sparse_set", element );
+		}
+		const Val& at(KeyType element) const
+		{
+			if (contains(element))
+			{
+				return m_PackedValArr[m_SparseArr[element]];
+			}
+			throw sparse_set_out_of_range( "Element not found in sparse_set", element );
+		}
+
+		const_iterator find(KeyType key) const noexcept
+		{
+			if (contains(key))
+			{
+				return m_PackedValArr.cbegin() + m_SparseArr[key];
+			}
+			return m_PackedValArr.cend();
+		}
+
+	public:
 		//Do not emplace the same element in the set twice, use try_emplace if this is a concern.
 		template<typename... Args>
 		requires std::is_constructible_v<Val, Args...>
@@ -87,7 +189,7 @@ namespace Internal
 
 		template<typename... Args>
 		requires std::is_constructible_v<Val, Args...>
-		std::pair<Iterator, bool> try_emplace(KeyType element, Args&&... args) noexcept
+		std::pair<iterator, bool> try_emplace(KeyType element, Args&&... args) noexcept
 		{
 			if (contains(element))
 			{
@@ -95,9 +197,22 @@ namespace Internal
 			}
 			
 			emplace(element, std::forward<Args>(args)...);
-			return { Iterator{ m_PackedValArr.end() - 1 }, true };
+			return { iterator{ m_PackedValArr.end() - 1 }, true };
 		}
-		
+
+		template<typename... Args>
+		requires std::is_constructible_v<Val, Args...>
+		Val& get_or_emplace(KeyType element, Args&&... args) noexcept
+		{
+			if (!contains(element))
+			{
+				return emplace(element, std::forward<Args>(args)...);
+			}
+
+			return m_PackedValArr[m_SparseArr[element]];
+		}
+
+	public:
 		//Do not erase an element that does not exist, use remove instead if this is a concern.
 		void erase(KeyType element) noexcept
 		{
@@ -118,10 +233,38 @@ namespace Internal
 			}
 
 			m_DenseArr[m_SparseArr[element]] = m_DenseArr.back();
+
+			m_SparseArr[m_DenseArr.back()] = element;
 			m_SparseArr[element] = INVALID_INDEX;
-			
+
 			m_DenseArr.pop_back();
 			m_PackedValArr.pop_back();
+		}
+
+		//Do not erase with iterator that's out of bounds
+		const_iterator erase(const_iterator pos) noexcept
+		{
+			ASSERT(!(pos >= cend() && pos < cbegin()), "Iterator out of bounds!");
+
+			const auto distance{ std::distance(cbegin(), pos) };
+			erase(m_DenseArr[val_index(pos)]);
+
+			return cbegin() + distance;
+		}
+
+		//Do not erase with iterator range that's out of bounds
+		const_iterator erase(const_iterator first, const_iterator last) noexcept
+		{
+			ASSERT(!(last > cend() || first < cbegin()) && first < last, "Iterator out of bounds!");
+			ASSERT(first != last, "First == last erases nothing!");
+
+			--last;
+			while (last > first)
+			{
+				last = --erase(last);
+			}
+
+			return erase(last);
 		}
 
 		bool remove(KeyType element) noexcept
@@ -136,6 +279,24 @@ namespace Internal
 
 		std::vector<KeyType> m_DenseArr{ };
 		std::vector<Val> m_PackedValArr{ };
+
+	private:
+		template <typename IteratorType>
+		[[nodiscard]] KeyType val_index(IteratorType pos) const noexcept
+		{
+			if constexpr (std::is_same_v<IteratorType, reverse_iterator>
+				|| std::is_same_v<IteratorType, const_reserve_iterator>)
+			{
+				ASSERT(!(pos >= rend() && pos < rbegin()), "Reverse iterator out of bounds");
+				return static_cast<KeyType>(rend() - 1 - pos);
+			}
+			else if constexpr (std::is_same_v<IteratorType, iterator>
+					|| std::is_same_v<IteratorType, const_iterator>)
+			{
+				ASSERT(!(pos >= end() && pos < begin()), "Iterator out of bounds");
+				return static_cast<KeyType>(pos - begin());
+			}
+		}
 	};
 }
 
