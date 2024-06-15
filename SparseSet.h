@@ -16,15 +16,17 @@ namespace Internal
 	namespace Impl
 	{
 		template<typename T>
-		concept KeyType = std::is_integral_v<T> && std::is_unsigned_v<T> 
-						&& std::is_trivially_copyable_v<T> && std::is_swappable_v<T>; //erase function
+		concept KeyType = std::is_integral_v<T> && std::is_unsigned_v<T>
+						&& std::is_trivially_copyable_v<T> && std::is_nothrow_swappable_v<T>  //erase && swap function
+						&& std::equality_comparable<T>;
 
 		template<typename T>
-		concept MoveAssignmentVal = std::is_nothrow_move_assignable_v<T>;
+		concept MoveAssignmentVal = std::is_nothrow_move_assignable_v<T> && std::is_nothrow_move_constructible_v<T>;
 
-		//We only want to move construct when we arent able to move assign
+		//We only want to move construct when we arent able to move assign (E.g classes with const member variables)
 		template<typename T>
-		concept MoveConstructVal = !MoveAssignmentVal<T> && std::is_nothrow_move_constructible_v<T> && std::is_nothrow_destructible_v<T>;
+		concept MoveConstructVal = !(std::is_nothrow_move_assignable_v<T> || std::is_move_assignable_v<T>) 
+								&& std::is_nothrow_move_constructible_v<T> && std::is_nothrow_destructible_v<T>;
 
 		template<typename T>
 		concept ValType =  (std::is_trivially_copyable_v<T> || MoveAssignmentVal<T> || MoveConstructVal<T>);
@@ -105,11 +107,97 @@ namespace Internal
 			return *this;
 		}
 
+	public:
+		using key_type = KeyType;
+		using dense_type = KeyType;
+		using value_type = Val;
+
+		using iterator = typename std::vector<Val>::iterator;
+		using const_iterator = typename std::vector<Val>::const_iterator;
+
+		using reverse_iterator = typename std::vector<Val>::reverse_iterator;
+		using const_reserve_iterator = typename std::vector<Val>::const_reverse_iterator;
+
+		iterator begin() noexcept { return m_PackedValArr.begin(); }
+		iterator end() noexcept { return m_PackedValArr.end(); }
+		const_iterator begin() const noexcept { return m_PackedValArr.begin(); }
+		const_iterator end() const noexcept { return m_PackedValArr.end(); }
+
+		reverse_iterator rbegin() noexcept { return m_PackedValArr.rbegin(); }
+		reverse_iterator rend() noexcept { return m_PackedValArr.rend(); }
+		const_reserve_iterator rbegin() const noexcept { return m_PackedValArr.rbegin(); }
+		const_reserve_iterator rend() const noexcept { return m_PackedValArr.rend(); }
+
+		const_iterator cbegin() const noexcept { return m_PackedValArr.cbegin(); }
+		const_iterator cend() const noexcept { return m_PackedValArr.cend(); }
+		const_reserve_iterator crbegin() const noexcept { return m_PackedValArr.crbegin(); }
+		const_reserve_iterator crend() const noexcept { return m_PackedValArr.crend(); }
+
+	public:
 		void swap(sparse_set& other) noexcept
 		{
 			std::swap(m_SparseArr, other.m_SparseArr);
 			std::swap(m_DenseArr, other.m_DenseArr);
 			std::swap(m_PackedValArr, other.m_PackedValArr);
+		}
+
+		void swap_elements(KeyType el1, KeyType el2) noexcept
+		{
+			ASSERT(el1 != el2, "Should not try swap element with itself!");
+			ASSERT(contains(el1) && contains(el2), "Set must contain elements!");
+			std::swap(m_DenseArr[m_SparseArr[el1]], m_DenseArr[m_SparseArr[el2]]);
+		}
+		bool try_swap_elements(KeyType el1, KeyType el2) noexcept
+		{
+			return (contains(el1) && contains(el2) && (swap_elements(el1, el2), true));
+		}
+		void swap_elements(const_iterator el1, const_iterator el2) noexcept
+		{
+			swap_elements(sparse_index(el1), sparse_index(el2));
+		}
+		bool try_swap_elements(const_iterator el1, const_iterator el2) noexcept
+		{
+			return try_swap_elements(sparse_index(el1), sparse_index(el2));
+		}
+
+		void swap_values(KeyType el1, KeyType el2) noexcept
+		{
+			ASSERT(el1 != el2, "Should not try swap element with itself!");
+			ASSERT(contains(el1) && contains(el2), "Set must contain elements!");
+			
+			if constexpr (std::is_trivially_copyable_v<Val>)
+			{
+				Val temp;
+				std::memcpy(&temp, &m_PackedValArr[m_SparseArr[el1]], sizeof(Val));
+				std::memcpy(&m_PackedValArr[m_SparseArr[el1]], &m_PackedValArr[m_SparseArr[el2]], sizeof(Val));
+				std::memcpy(&m_PackedValArr[m_SparseArr[el2]], &temp, sizeof(Val));
+			}
+			else if constexpr (Impl::MoveAssignmentVal<Val>)
+			{
+				std::swap(m_PackedValArr[m_SparseArr[el1]], m_PackedValArr[m_SparseArr[el2]]);
+			}
+			else if constexpr (Impl::MoveConstructVal<Val>)
+			{
+				Val temp{ std::move(m_PackedValArr[m_SparseArr[el1]]) };
+				m_PackedValArr[m_SparseArr[el1]].~Val();
+				new (&m_PackedValArr[m_SparseArr[el1]]) Val(std::move(m_PackedValArr[m_SparseArr[el2]]));
+				m_PackedValArr[m_SparseArr[el2]].~Val();
+				new (&m_PackedValArr[m_SparseArr[el2]]) Val(std::move(temp));
+			}
+			
+			std::swap(m_SparseArr[el1], m_SparseArr[el2]);
+		}
+		bool try_swap_values(KeyType el1, KeyType el2) noexcept
+		{
+			return (contains(el1) && contains(el2) && (swap_values(el1, el2), true));
+		}
+		void swap_values(const_iterator el1, const_iterator el2) noexcept
+		{
+			swap_values(sparse_index(el1), sparse_index(el2));
+		}
+		bool try_swap_values(const_iterator el1, const_iterator el2) noexcept
+		{
+			return try_swap_values(sparse_index(el1), sparse_index(el2));
 		}
 
 	public:
@@ -157,33 +245,12 @@ namespace Internal
 			m_SparseArr.clear();
 		}
 
-		using key_type = KeyType;
-		using dense_type = KeyType;
-		using value_type = Val;
-
-		using iterator = typename std::vector<Val>::iterator;
-		using const_iterator = typename std::vector<Val>::const_iterator;
-		
-		using reverse_iterator = typename std::vector<Val>::reverse_iterator;
-		using const_reserve_iterator = typename std::vector<Val>::const_reverse_iterator;
-
-		iterator begin() noexcept { return m_PackedValArr.begin(); }
-		iterator end() noexcept { return m_PackedValArr.end(); }
-		const_iterator begin() const noexcept { return m_PackedValArr.begin(); }
-		const_iterator end() const noexcept { return m_PackedValArr.end(); }
-
-		reverse_iterator rbegin() noexcept { return m_PackedValArr.rbegin(); }
-		reverse_iterator rend() noexcept { return m_PackedValArr.rend(); }
-		const_reserve_iterator rbegin() const noexcept { return m_PackedValArr.rbegin(); }
-		const_reserve_iterator rend() const noexcept { return m_PackedValArr.rend(); }
-
-		const_iterator cbegin() const noexcept { return m_PackedValArr.cbegin(); }
-		const_iterator cend() const noexcept { return m_PackedValArr.cend(); }
-		const_reserve_iterator crbegin() const noexcept { return m_PackedValArr.crbegin(); }
-		const_reserve_iterator crend() const noexcept { return m_PackedValArr.crend(); }
-
 	public:
-		[[nodiscard]] bool contains(KeyType element) const noexcept { return element < m_SparseArr.size() && m_SparseArr[element] != INVALID_INDEX; }
+		[[nodiscard]] bool contains(KeyType element) const noexcept 
+		{ 
+			ASSERT(element != INVALID_INDEX, "Element must be a valid index!");
+			return element < m_SparseArr.size() && m_SparseArr[element] != INVALID_INDEX; 
+		}
 
 		//Iterator must be in bounds to get a valid value
 		template <typename IteratorType>
@@ -303,10 +370,10 @@ namespace Internal
 				m_PackedValArr[m_SparseArr[element]].~Val();
 				new (&m_PackedValArr[m_SparseArr[element]]) Val(std::move(m_PackedValArr.back()));
 			}
-
+			
 			m_DenseArr[m_SparseArr[element]] = m_DenseArr.back();
-
-			m_SparseArr[m_DenseArr.back()] = element;
+			
+			m_SparseArr[m_DenseArr.back()] = m_SparseArr[element];
 			m_SparseArr[element] = INVALID_INDEX;
 
 			m_DenseArr.pop_back();
@@ -343,6 +410,14 @@ namespace Internal
 		{
 			return contains(element) && (erase(element), true);
 		}
+
+	public:
+		//template <typename Compare = std::less<Val>>
+		//requires std::sortable<std::vector<size_t>, Compare>&& std::movable<Val>
+		//void sort() noexcept
+		//{
+
+		//}
 
 	private:
 		static constexpr KeyType INVALID_INDEX = std::numeric_limits<KeyType>::max();
