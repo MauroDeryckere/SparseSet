@@ -141,6 +141,7 @@ namespace Internal
 			std::swap(m_PackedValArr, other.m_PackedValArr);
 		}
 
+		//Should not swap elements that are not in the set, use try_swap if this is a concern
 		void swap_elements(KeyType el1, KeyType el2) noexcept
 		{
 			ASSERT(el1 != el2, "Should not try swap element with itself!");
@@ -151,15 +152,13 @@ namespace Internal
 		{
 			return (contains(el1) && contains(el2) && (swap_elements(el1, el2), true));
 		}
+		//Should not swap elements that are not in the set, must use valid iterators
 		void swap_elements(const_iterator el1, const_iterator el2) noexcept
 		{
-			swap_elements(sparse_index(el1), sparse_index(el2));
-		}
-		bool try_swap_elements(const_iterator el1, const_iterator el2) noexcept
-		{
-			return try_swap_elements(sparse_index(el1), sparse_index(el2));
+			std::swap(m_DenseArr[val_index(el1)], m_DenseArr[val_index(el2)]);
 		}
 
+		//Should not swap elements that are not in the set, use try_swap if this is a concern
 		void swap_values(KeyType el1, KeyType el2) noexcept
 		{
 			ASSERT(el1 != el2, "Should not try swap element with itself!");
@@ -191,13 +190,10 @@ namespace Internal
 		{
 			return (contains(el1) && contains(el2) && (swap_values(el1, el2), true));
 		}
+		//Should not swap elements that are not in the set, must use valid iterators
 		void swap_values(const_iterator el1, const_iterator el2) noexcept
 		{
 			swap_values(sparse_index(el1), sparse_index(el2));
-		}
-		bool try_swap_values(const_iterator el1, const_iterator el2) noexcept
-		{
-			return try_swap_values(sparse_index(el1), sparse_index(el2));
 		}
 
 	public:
@@ -412,6 +408,8 @@ namespace Internal
 		}
 
 	public:
+		//TODO SORTING
+		
 		//template <typename Compare = std::less<Val>>
 		//requires std::sortable<std::vector<size_t>, Compare>&& std::movable<Val>
 		//void sort() noexcept
@@ -429,7 +427,7 @@ namespace Internal
 
 	private:
 		template <typename IteratorType>
-		[[nodiscard]] KeyType val_index(IteratorType pos) const noexcept
+		inline [[nodiscard]] KeyType val_index(IteratorType pos) const noexcept
 		{
 			if constexpr (std::is_same_v<IteratorType, reverse_iterator>
 				|| std::is_same_v<IteratorType, const_reserve_iterator>)

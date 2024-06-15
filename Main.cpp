@@ -325,8 +325,8 @@ void TestComplexTypes()
     std::cout << "\n";
 
     set3.erase(set3.end() - 1);
-    set3.swap_elements(set3.begin(), set3.end() - 1);
-    set3.try_swap_values(set3.begin(), set3.end() - 1);
+    //set3.swap_elements(set3.begin(), set3.end() - 1);
+    set3.swap_values(set3.begin(), set3.end() - 1);
 
     for (auto it{ set3.begin() }; auto && e : set3)
     {
