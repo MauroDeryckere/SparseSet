@@ -1,6 +1,10 @@
 #include <iostream>
 #include <string>
 
+#include <chrono>
+
+#include <random>
+
 #include "SparseSet.h"
 
 void TestSparseSetInit();
@@ -11,6 +15,19 @@ void TestSparseSetRandomAccess();
 
 void TestComplexTypes();
 
+void TestSorting();
+
+int RandomInt(int min, int max) 
+{
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+
+    std::uniform_int_distribution<> distr(min, max);
+
+    return distr(gen);
+}
+
+
 int main() 
 {
     TestSparseSetInit();
@@ -20,6 +37,8 @@ int main()
     TestSparseSetRandomAccess();
 
     TestComplexTypes();
+
+    TestSorting();
 
     return 0;
 }
@@ -180,7 +199,6 @@ void TestSparseSetIteration()
     std::cout << "\n";
 
     //set.swap_elements(0, 3);
-    set.swap_values(0, 3);
 
     for (auto it{ set.begin() }; auto && e : set)
     {
@@ -247,7 +265,6 @@ void TestComplexTypes()
     }
 
     set1.erase(3);
-    set1.swap_values(2, 5);
     
     std::cout << "\n";
 
@@ -291,7 +308,7 @@ void TestComplexTypes()
     }
     std::cout << "\n";
 
-    set2.try_swap_values(1, 28);
+   // set2.try_swap_values(1, 28);
     set2.try_swap_elements(1, 28);
 
     for (auto it{ set2.begin() }; auto && e : set2)
@@ -326,7 +343,6 @@ void TestComplexTypes()
 
     set3.erase(set3.end() - 1);
     //set3.swap_elements(set3.begin(), set3.end() - 1);
-    set3.swap_values(set3.begin(), set3.end() - 1);
 
     for (auto it{ set3.begin() }; auto && e : set3)
     {
@@ -334,4 +350,57 @@ void TestComplexTypes()
         std::cout << set3.sparse_index(it) << "\n";
         ++it;
     }
+}
+
+void TestSorting() {
+    std::cout << "\nSORTING\n";
+
+    Internal::sparse_set<int> set1;
+    Internal::sparse_set<int> set2;
+
+    constexpr int NUM_ELEMENTS{ 100 };
+    for (int i = 0; i < NUM_ELEMENTS; ++i) 
+    {
+        int random_value = RandomInt(0, 10000);
+        int random_idx = RandomInt(i, i*30);
+        set1.try_emplace(random_idx, random_value);
+        set2.try_emplace(random_idx, random_value);
+    }
+
+    auto start1 = std::chrono::high_resolution_clock::now();
+    set1.sort_1([](const int& a, const int& b) 
+        {
+            return a < b;
+        });
+
+    auto end1 = std::chrono::high_resolution_clock::now();
+    auto duration1 = std::chrono::duration_cast<std::chrono::nanoseconds>(end1 - start1);
+
+    std::cout << "Sorted set 1:\n";
+    for (auto it = set1.begin(); it != set1.end(); ++it) 
+    {
+        std::cout << *it << ", ";
+        std::cout << set1.sparse_index(it) << "\n";
+    }
+
+    auto start2 = std::chrono::high_resolution_clock::now();
+    set2.sort_2([](const int& a, const int& b) 
+        {
+            return a < b;
+        });
+
+    auto end2 = std::chrono::high_resolution_clock::now();
+    auto duration2 = std::chrono::duration_cast<std::chrono::nanoseconds>(end2 - start2);
+
+    std::cout << "\n\nSorted set 2:\n";
+    for (auto it = set2.begin(); it != set2.end(); ++it) 
+    {
+        std::cout << *it << ", ";
+        std::cout << set2.sparse_index(it) << "\n";
+    }
+
+    std::cout << "\n\n";
+
+    std::cout << "Duration for sort_1: " << duration1 << " nanoseconds\n";
+    std::cout << "Duration for sort_2: " << duration2 << " nanoseconds\n";
 }

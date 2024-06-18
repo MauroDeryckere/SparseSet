@@ -8,6 +8,8 @@
 #include <utility>
 #include <stdexcept>
 #include <string>
+#include <algorithm>
+#include <numeric>
 
 #include "InternalAssert.h"
 
@@ -156,44 +158,6 @@ namespace Internal
 		void swap_elements(const_iterator el1, const_iterator el2) noexcept
 		{
 			std::swap(m_DenseArr[val_index(el1)], m_DenseArr[val_index(el2)]);
-		}
-
-		//Should not swap elements that are not in the set, use try_swap if this is a concern
-		void swap_values(KeyType el1, KeyType el2) noexcept
-		{
-			ASSERT(el1 != el2, "Should not try swap element with itself!");
-			ASSERT(contains(el1) && contains(el2), "Set must contain elements!");
-			
-			if constexpr (std::is_trivially_copyable_v<Val>)
-			{
-				Val temp;
-				std::memcpy(&temp, &m_PackedValArr[m_SparseArr[el1]], sizeof(Val));
-				std::memcpy(&m_PackedValArr[m_SparseArr[el1]], &m_PackedValArr[m_SparseArr[el2]], sizeof(Val));
-				std::memcpy(&m_PackedValArr[m_SparseArr[el2]], &temp, sizeof(Val));
-			}
-			else if constexpr (Impl::MoveAssignmentVal<Val>)
-			{
-				std::swap(m_PackedValArr[m_SparseArr[el1]], m_PackedValArr[m_SparseArr[el2]]);
-			}
-			else if constexpr (Impl::MoveConstructVal<Val>)
-			{
-				Val temp{ std::move(m_PackedValArr[m_SparseArr[el1]]) };
-				m_PackedValArr[m_SparseArr[el1]].~Val();
-				new (&m_PackedValArr[m_SparseArr[el1]]) Val(std::move(m_PackedValArr[m_SparseArr[el2]]));
-				m_PackedValArr[m_SparseArr[el2]].~Val();
-				new (&m_PackedValArr[m_SparseArr[el2]]) Val(std::move(temp));
-			}
-			
-			std::swap(m_SparseArr[el1], m_SparseArr[el2]);
-		}
-		bool try_swap_values(KeyType el1, KeyType el2) noexcept
-		{
-			return (contains(el1) && contains(el2) && (swap_values(el1, el2), true));
-		}
-		//Should not swap elements that are not in the set, must use valid iterators
-		void swap_values(const_iterator el1, const_iterator el2) noexcept
-		{
-			swap_values(sparse_index(el1), sparse_index(el2));
 		}
 
 	public:
@@ -408,14 +372,61 @@ namespace Internal
 		}
 
 	public:
-		//TODO SORTING
-		
-		//template <typename Compare = std::less<Val>>
-		//requires std::sortable<std::vector<size_t>, Compare>&& std::movable<Val>
-		//void sort() noexcept
-		//{
+		template<typename Compare>
+		void sort_1(Compare compare) 
+		{
+			std::vector<size_t> copy(m_PackedValArr.size());
+			std::iota(copy.begin(), copy.end(), size_t{});
 
-		//}
+			std::sort(copy.begin(), copy.end(),
+				[this, c = std::move(compare)](const auto lhs, const auto rhs) 
+				{
+					return c(m_PackedValArr[lhs], m_PackedValArr[rhs]);
+				});
+
+			for (size_t pos{}, length = copy.size(); pos < length; ++pos) 
+			{
+				auto curr = pos;
+				auto next = copy[curr];
+
+				while (curr != next) 
+				{
+					swap_values(m_DenseArr[copy[curr]], m_DenseArr[copy[next]]);
+					std::swap(m_SparseArr[m_DenseArr[copy[curr]]], m_SparseArr[m_DenseArr[copy[next]]]);
+
+					std::swap(m_DenseArr[copy[curr]], m_DenseArr[copy[next]]);
+
+					copy[curr] = curr;
+					curr = next;
+					next = copy[curr];
+				}
+			}
+		}
+
+		template<typename Compare>
+		void sort_2(Compare compare)
+		{
+			std::sort(m_DenseArr.begin(), m_DenseArr.end(),
+				[this, c = std::move(compare)](const auto lhs, const auto rhs)
+				{
+					return c(m_PackedValArr[m_SparseArr[lhs]], m_PackedValArr[m_SparseArr[rhs]]);
+				});
+
+			for (std::size_t pos{}, end = m_PackedValArr.size(); pos < end; ++pos)
+			{
+				auto curr = pos;
+				auto next = m_SparseArr[m_DenseArr[curr]];
+
+				while (curr != next)
+				{
+					swap_values(m_DenseArr[curr], m_DenseArr[next]);
+					m_SparseArr[m_DenseArr[curr]] = static_cast<KeyType>(curr);
+
+					curr = next;
+					next = m_SparseArr[m_DenseArr[curr]];
+				}
+			}
+		}
 
 	private:
 		static constexpr KeyType INVALID_INDEX = std::numeric_limits<KeyType>::max();
@@ -441,6 +452,43 @@ namespace Internal
 				ASSERT(!(pos >= end() && pos < begin()), "Iterator out of bounds");
 				return static_cast<KeyType>(pos - begin());
 			}
+		}
+
+	private:
+		//Should not swap elements that are not in the set, use try_swap if this is a concern
+		void swap_values(KeyType el1, KeyType el2) noexcept
+		{
+			//ASSERT(el1 != el2, "Should not try swap element with itself!");
+			ASSERT(contains(el1) && contains(el2), "Set must contain elements!");
+
+			if constexpr (std::is_trivially_copyable_v<Val>)
+			{
+				Val temp;
+				std::memcpy(&temp, &m_PackedValArr[m_SparseArr[el1]], sizeof(Val));
+				std::memcpy(&m_PackedValArr[m_SparseArr[el1]], &m_PackedValArr[m_SparseArr[el2]], sizeof(Val));
+				std::memcpy(&m_PackedValArr[m_SparseArr[el2]], &temp, sizeof(Val));
+			}
+			else if constexpr (Impl::MoveAssignmentVal<Val>)
+			{
+				std::swap(m_PackedValArr[m_SparseArr[el1]], m_PackedValArr[m_SparseArr[el2]]);
+			}
+			else if constexpr (Impl::MoveConstructVal<Val>)
+			{
+				Val temp{ std::move(m_PackedValArr[m_SparseArr[el1]]) };
+				m_PackedValArr[m_SparseArr[el1]].~Val();
+				new (&m_PackedValArr[m_SparseArr[el1]]) Val(std::move(m_PackedValArr[m_SparseArr[el2]]));
+				m_PackedValArr[m_SparseArr[el2]].~Val();
+				new (&m_PackedValArr[m_SparseArr[el2]]) Val(std::move(temp));
+			}
+		}
+		bool try_swap_values(KeyType el1, KeyType el2) noexcept
+		{
+			return (contains(el1) && contains(el2) && (swap_values(el1, el2), true));
+		}
+		//Should not swap elements that are not in the set, must use valid iterators
+		void swap_values(const_iterator el1, const_iterator el2) noexcept
+		{
+			swap_values(sparse_index(el1), sparse_index(el2));
 		}
 	};
 }
