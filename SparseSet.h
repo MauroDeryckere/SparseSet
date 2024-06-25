@@ -373,22 +373,22 @@ namespace Internal
 
 	public:
 		template<typename Compare>
-		void sort_1(Compare compare) 
+		void sort(Compare compare)
 		{
 			std::vector<size_t> copy(m_PackedValArr.size());
-			std::iota(copy.begin(), copy.end(), size_t{});
+			std::iota(copy.begin(), copy.end(), size_t{ });
 
 			std::sort(copy.begin(), copy.end(),
-				[this, c = std::move(compare)](const auto lhs, const auto rhs) 
+				[this, compare{ std::move(compare) }](const auto lhs, const auto rhs)
 				{
-					return c(m_PackedValArr[lhs], m_PackedValArr[rhs]);
+					return compare(m_PackedValArr[lhs], m_PackedValArr[rhs]);
 				});
 
-			for (size_t pos{}, length = copy.size(); pos < length; ++pos) 
+			for (size_t pos{ 0 }; pos < copy.size(); ++pos) 
 			{
 				auto curr = pos;
 				auto next = copy[curr];
-
+				
 				while (curr != next) 
 				{
 					swap_values(m_DenseArr[copy[curr]], m_DenseArr[copy[next]]);
@@ -403,30 +403,28 @@ namespace Internal
 			}
 		}
 
-		template<typename Compare>
-		void sort_2(Compare compare)
-		{
-			std::sort(m_DenseArr.begin(), m_DenseArr.end(),
-				[this, c = std::move(compare)](const auto lhs, const auto rhs)
-				{
-					return c(m_PackedValArr[m_SparseArr[lhs]], m_PackedValArr[m_SparseArr[rhs]]);
-				});
+		//Slower sort function without the copy, should be possibly to make faster  - TODO
+		//template<typename Compare>
+		//void sort(Compare compare)
+		//{
+		//	[The bottleneck is the actual sort here, likely due to the extra indirection.]
+		//	std::sort(m_DenseArr.begin(), m_DenseArr.end(), std::move(compare));
 
-			for (std::size_t pos{}, end = m_PackedValArr.size(); pos < end; ++pos)
-			{
-				auto curr = pos;
-				auto next = m_SparseArr[m_DenseArr[curr]];
+		//	for (KeyType pos{ 0 }; pos < m_PackedValArr.size(); ++pos)
+		//	{
+		//		KeyType curr = pos;
+		//		auto next = m_SparseArr[m_DenseArr[curr]];
 
-				while (curr != next)
-				{
-					swap_values(m_DenseArr[curr], m_DenseArr[next]);
-					m_SparseArr[m_DenseArr[curr]] = static_cast<KeyType>(curr);
+		//		while (curr != next)
+		//		{
+		//			swap_values(m_DenseArr[curr], m_DenseArr[next]);
+		//			m_SparseArr[m_DenseArr[curr]] = curr;
 
-					curr = next;
-					next = m_SparseArr[m_DenseArr[curr]];
-				}
-			}
-		}
+		//			curr = next;
+		//			next = m_SparseArr[m_DenseArr[curr]];
+		//		}
+		//	}
+		//}
 
 	private:
 		static constexpr KeyType INVALID_INDEX = std::numeric_limits<KeyType>::max();
@@ -458,7 +456,7 @@ namespace Internal
 		//Should not swap elements that are not in the set, use try_swap if this is a concern
 		void swap_values(KeyType el1, KeyType el2) noexcept
 		{
-			//ASSERT(el1 != el2, "Should not try swap element with itself!");
+			ASSERT(el1 != el2, "Should not try swap element with itself!");
 			ASSERT(contains(el1) && contains(el2), "Set must contain elements!");
 
 			if constexpr (std::is_trivially_copyable_v<Val>)

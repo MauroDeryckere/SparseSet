@@ -352,55 +352,62 @@ void TestComplexTypes()
     }
 }
 
-void TestSorting() {
+void TestSorting() 
+{
     std::cout << "\nSORTING\n";
 
-    Internal::sparse_set<int> set1;
-    Internal::sparse_set<int> set2;
+    Internal::sparse_set<int> set1{};
 
     constexpr int NUM_ELEMENTS{ 100 };
-    for (int i = 0; i < NUM_ELEMENTS; ++i) 
-    {
-        int random_value = RandomInt(0, 10000);
-        int random_idx = RandomInt(i, i*30);
-        set1.try_emplace(random_idx, random_value);
-        set2.try_emplace(random_idx, random_value);
-    }
+    constexpr int NUM_TRIALS{ 1 };
 
-    auto start1 = std::chrono::high_resolution_clock::now();
-    set1.sort_1([](const int& a, const int& b) 
+    std::vector<long long> durations1{};
+
+    for (int trial{ 0 }; trial < NUM_TRIALS; ++trial) 
+    {
+        set1.clear();
+
+        for (int i = 0; i < NUM_ELEMENTS; ++i)
         {
-            return a < b;
-        });
+            const int randomValue = RandomInt(0, 1000000);
+            const int randomIdx = RandomInt(i, i * 100);
 
-    auto end1 = std::chrono::high_resolution_clock::now();
-    auto duration1 = std::chrono::duration_cast<std::chrono::nanoseconds>(end1 - start1);
+            set1.try_emplace(randomIdx, randomValue);
+        }
 
-    std::cout << "Sorted set 1:\n";
-    for (auto it = set1.begin(); it != set1.end(); ++it) 
-    {
-        std::cout << *it << ", ";
-        std::cout << set1.sparse_index(it) << "\n";
-    }
+        auto start1 = std::chrono::high_resolution_clock::now();
 
-    auto start2 = std::chrono::high_resolution_clock::now();
-    set2.sort_2([](const int& a, const int& b) 
+        set1.sort([](const auto& a, const auto& b)
+            {
+                return a < b;
+            });
+
+        auto end1 = std::chrono::high_resolution_clock::now();
+        auto duration1 = std::chrono::duration_cast<std::chrono::nanoseconds>(end1 - start1);
+        durations1.emplace_back(duration1.count());
+
+        std::cout << "Sorted set 1:\n";
+        for (auto it = set1.begin(); it != set1.end(); ++it)
         {
-            return a < b;
-        });
-
-    auto end2 = std::chrono::high_resolution_clock::now();
-    auto duration2 = std::chrono::duration_cast<std::chrono::nanoseconds>(end2 - start2);
-
-    std::cout << "\n\nSorted set 2:\n";
-    for (auto it = set2.begin(); it != set2.end(); ++it) 
-    {
-        std::cout << *it << ", ";
-        std::cout << set2.sparse_index(it) << "\n";
+            std::cout << *it << ", ";
+            std::cout << set1.sparse_index(it) << "\n";
+        }
     }
+
+    auto calc_avg = 
+        [](std::vector<long long>& durations) -> long long
+        {
+            std::sort(durations.begin(), durations.end());
+
+            const int discardCount { static_cast<int>(durations.size() * 0.1f)};
+            const auto sum{ std::accumulate(durations.begin() + discardCount, durations.end() - discardCount, 0LL) };
+
+            return sum / durations.size();
+        };
+
+    const auto avgDuration1{ calc_avg(durations1) };
 
     std::cout << "\n\n";
 
-    std::cout << "Duration for sort_1: " << duration1 << " nanoseconds\n";
-    std::cout << "Duration for sort_2: " << duration2 << " nanoseconds\n";
+    std::cout << "Average duration for sort: " << avgDuration1 << " nanoseconds\n";
 }
