@@ -443,10 +443,10 @@ namespace Internal
 			return std::is_sorted(m_PackedValArr.begin(), m_PackedValArr.end(), std::forward<Compare>(compare));
 		}
 
-		//Emplace element in a sorted set, 
-		template<typename... Args, Impl::Compare<Val> Compare = std::less< >>
+		//Emplace element in a sorted set, set should be sorted before using && element should not be in set yet.
+		template<typename... Args, Impl::Compare<Val> Compare>
 		requires std::is_constructible_v<Val, Args...> && Impl::MoveAssignmentVal<Val>
-		iterator emplace_sorted(KeyType element, Compare&& compare = { }, Args&&... args) noexcept
+		iterator emplace_sorted(KeyType element, Compare&& compare, Args&&... args) noexcept
 		{
 			DEBUG_ASSERT(is_sorted(std::forward<Compare>(compare)), "Set must be sorted");
 			ASSERT(!contains(element), "Element already in set!");
@@ -473,16 +473,31 @@ namespace Internal
 
 			return m_PackedValArr.begin() + denseIndex;
 		}
-
-		template<typename... Args, Impl::Compare<Val> Compare = std::less< >>
+		//Emplace element in a sorted set, set should be sorted before using && element should not be in set yet.
+		template<typename... Args>
 		requires std::is_constructible_v<Val, Args...>&& Impl::MoveAssignmentVal<Val>
-		std::pair<iterator, bool> try_emplace_sorted(KeyType element, Compare&& compare = { }, Args&&... args) noexcept
+		iterator emplace_sorted(KeyType element, Args&&... args) noexcept
+		{
+			return emplace_sorted(element, std::less<>{ }, std::forward<Args>(args)...);
+		}
+
+		//Tries to emplace element in sorted set when it does not contain the element, set should be sorted.
+		template<typename... Args, Impl::Compare<Val> Compare>
+		requires std::is_constructible_v<Val, Args...>&& Impl::MoveAssignmentVal<Val>
+		std::pair<iterator, bool> try_emplace_sorted(KeyType element, Compare&& compare, Args&&... args) noexcept
 		{
 			if (contains(element))
 			{
 				return { m_PackedValArr.begin() + m_SparseArr[element], false };
 			}
 			return { emplace_sorted(element, std::forward<Compare>(compare), std::forward<Args>(args)...), true };
+		}
+		//Tries to emplace element in sorted set when it does not contain the element, set should be sorted.
+		template<typename... Args>
+		requires std::is_constructible_v<Val, Args...>&& Impl::MoveAssignmentVal<Val>
+		std::pair<iterator, bool> try_emplace_sorted(KeyType element, Args&&... args) noexcept
+		{
+			return try_emplace_sorted(element, std::less<>{ }, std::forward<Args>(args)...);
 		}
 
 	private:
