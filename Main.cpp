@@ -376,7 +376,8 @@ void TestSorting()
         }
 
         auto start1 = std::chrono::high_resolution_clock::now();
-
+        
+        //set1.sort();
         set1.sort([](const auto& a, const auto& b)
             {
                 return a < b;
@@ -392,6 +393,9 @@ void TestSorting()
             std::cout << *it << ", ";
             std::cout << set1.sparse_index(it) << "\n";
         }
+
+        std::cout << " \n\n";
+        std::cout << std::boolalpha << set1.is_sorted() << "\n";
     }
 
     auto calc_avg = 
@@ -408,6 +412,30 @@ void TestSorting()
     const auto avgDuration1{ calc_avg(durations1) };
 
     std::cout << "\n\n";
-
     std::cout << "Average duration for sort: " << avgDuration1 << " nanoseconds\n";
+    std::cout << "\n\n";
+
+    //EMPLACE SORTED
+    Internal::sparse_set<int> emplSet{};
+    for (int i = 0; i < 10; ++i)
+    {
+        emplSet.emplace(i, i*10);
+    }
+    emplSet.sort();
+
+    for (auto it = emplSet.begin(); it != emplSet.end(); ++it)
+    {
+        std::cout << *it << ", ";
+        std::cout << emplSet.sparse_index(it) << "\n";
+    }
+    std::cout << "\n\n";
+
+    emplSet.emplace_sorted(11,6);
+
+    for (auto it = emplSet.begin(); it != emplSet.end(); ++it)
+    {
+        std::cout << *it << ", ";
+        std::cout << emplSet.sparse_index(it) << "\n";
+    }
+    std::cout << "\n\n";
 }

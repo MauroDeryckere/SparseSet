@@ -32,6 +32,13 @@ namespace Internal
 
 		template<typename T>
 		concept ValType =  (std::is_trivially_copyable_v<T> || MoveAssignmentVal<T> || MoveConstructVal<T>);
+
+		template <typename C, typename T>
+		concept Compare = requires(C comp, T a, T b) 
+		{
+			{ comp(a, b) } -> std::convertible_to<bool>;
+		};
+
 	}
 
 	template<Impl::KeyType KeyType>
@@ -205,6 +212,10 @@ namespace Internal
 			m_SparseArr.clear();
 		}
 
+		const std::vector<KeyType>& sparse() const noexcept { return m_SparseArr; }
+		const std::vector<KeyType>& dense() const noexcept { return m_DenseArr; }
+		const std::vector<Val>& data() const noexcept { return m_PackedValArr; }
+
 	public:
 		[[nodiscard]] bool contains(KeyType element) const noexcept 
 		{ 
@@ -226,14 +237,14 @@ namespace Internal
 			ASSERT(contains(element), "Element not in set!");
 			return m_PackedValArr[m_SparseArr[element]];
 		}
-		const Val& operator[](KeyType element) const noexcept
+		Val const& operator[](KeyType element) const noexcept
 		{
 			ASSERT(contains(element), "Element not in set!");
 			return m_PackedValArr[m_SparseArr[element]];
 		}
 
 		//Random access with bounds checking (similar to std::vector:::at())
-		Val& at(KeyType element)
+		Val const& at(KeyType element)
 		{
 			if (contains(element))
 			{
@@ -241,7 +252,7 @@ namespace Internal
 			}
 			throw sparse_set_out_of_range( "Element not found in sparse_set", element );
 		}
-		const Val& at(KeyType element) const
+		Val const& at(KeyType element) const
 		{
 			if (contains(element))
 			{
@@ -345,7 +356,7 @@ namespace Internal
 		{
 			ASSERT(!(pos >= end() && pos < begin()), "Iterator out of bounds!");
 
-			const auto distance{ std::distance(cbegin(), pos) };
+			auto const distance{ std::distance(cbegin(), pos) };
 			erase(m_DenseArr[val_index(pos)]);
 
 			return begin() + distance;
@@ -372,8 +383,8 @@ namespace Internal
 		}
 
 	public:
-		template<typename Compare>
-		void sort(Compare compare)
+		template <Impl::Compare<Val> Compare = std::less< >>
+		void sort(Compare compare = { })
 		{
 			std::vector<size_t> copy(m_PackedValArr.size());
 			std::iota(copy.begin(), copy.end(), size_t{ });
@@ -381,13 +392,13 @@ namespace Internal
 			std::sort(copy.begin(), copy.end(),
 				[this, compare{ std::move(compare) }](const auto lhs, const auto rhs)
 				{
-					return compare(m_PackedValArr[lhs], m_PackedValArr[rhs]);
+					return std::invoke(compare, m_PackedValArr[lhs], m_PackedValArr[rhs]);
 				});
 
 			for (size_t pos{ 0 }; pos < copy.size(); ++pos) 
 			{
-				auto curr = pos;
-				auto next = copy[curr];
+				size_t curr = pos;
+				size_t next = copy[curr];
 				
 				while (curr != next) 
 				{
@@ -425,6 +436,50 @@ namespace Internal
 		//		}
 		//	}
 		//}
+
+		template <Impl::Compare<Val> Compare = std::less< >>
+		[[nodiscard]] bool is_sorted(Compare compare = { }) const noexcept
+		{
+			return std::is_sorted(m_PackedValArr.begin(), m_PackedValArr.end(), std::move(compare));
+		}
+
+		template<typename... Args>
+		requires std::is_constructible_v<Val, Args...> && Impl::MoveAssignmentVal<Val>
+		iterator emplace_sorted(KeyType element, Args&&... args) noexcept
+		{
+			ASSERT(!contains(element), "Element already in set!");
+
+			if (element >= m_SparseArr.size())
+			{
+				m_SparseArr.resize(element + 1, INVALID_INDEX);
+			}
+
+			auto const insertIt = lower_bound(Val{ std::forward<Args>(args)... });
+			KeyType const denseIndex = static_cast<KeyType>(std::distance(m_PackedValArr.begin(), insertIt));
+
+			m_DenseArr.insert(m_DenseArr.begin() + denseIndex, element);
+			m_SparseArr[element] = denseIndex;
+
+			m_PackedValArr.insert(insertIt, std::forward<Args>(args)...);
+
+			for (KeyType i = denseIndex + 1; i < m_DenseArr.size(); ++i)
+			{
+				m_SparseArr[m_DenseArr[i]] = i;
+			}
+
+			return m_PackedValArr.begin() + denseIndex;
+		}
+
+		template<typename... Args>
+		requires std::is_constructible_v<Val, Args...>&& Impl::MoveAssignmentVal<Val>
+		std::pair<iterator, bool> try_emplace_sorted(KeyType element, Args&&... args) noexcept
+		{
+			if (contains(element))
+			{
+				return { m_PackedValArr.begin() + m_SparseArr[element], false };
+			}
+			return { emplace_sorted(element, std::forward<Args>(args)...), true };
+		}
 
 	private:
 		static constexpr KeyType INVALID_INDEX = std::numeric_limits<KeyType>::max();
@@ -487,6 +542,18 @@ namespace Internal
 		void swap_values(const_iterator el1, const_iterator el2) noexcept
 		{
 			swap_values(sparse_index(el1), sparse_index(el2));
+		}
+	
+	private:
+		template <Impl::Compare<Val> Compare = std::less< >>
+		iterator lower_bound(const Val& value, Compare compare = { }) noexcept
+		{
+			return std::lower_bound(m_PackedValArr.begin(), m_PackedValArr.end(), value, std::move(compare));
+		}
+		template <Impl::Compare<Val> Compare = std::less< >>
+		const_iterator lower_bound(const Val& value, Compare compare = { }) const noexcept
+		{
+			return std::lower_bound(m_PackedValArr.begin(), m_PackedValArr.end(), value, std::move(compare));
 		}
 	};
 }
