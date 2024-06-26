@@ -384,13 +384,13 @@ namespace Internal
 
 	public:
 		template <Impl::Compare<Val> Compare = std::less< >>
-		void sort(Compare compare = { })
+		void sort(Compare&& compare = { })
 		{
 			std::vector<size_t> copy(m_PackedValArr.size());
 			std::iota(copy.begin(), copy.end(), size_t{ });
 
 			std::sort(copy.begin(), copy.end(),
-				[this, compare{ std::move(compare) }](const auto lhs, const auto rhs)
+				[this, compare{ std::forward<Compare>(compare) }](const auto lhs, const auto rhs)
 				{
 					return std::invoke(compare, m_PackedValArr[lhs], m_PackedValArr[rhs]);
 				});
@@ -438,15 +438,17 @@ namespace Internal
 		//}
 
 		template <Impl::Compare<Val> Compare = std::less< >>
-		[[nodiscard]] bool is_sorted(Compare compare = { }) const noexcept
+		[[nodiscard]] bool is_sorted(Compare&& compare = { }) const noexcept
 		{
-			return std::is_sorted(m_PackedValArr.begin(), m_PackedValArr.end(), std::move(compare));
+			return std::is_sorted(m_PackedValArr.begin(), m_PackedValArr.end(), std::forward<Compare>(compare));
 		}
 
-		template<typename... Args>
+		//Emplace element in a sorted set, 
+		template<typename... Args, Impl::Compare<Val> Compare = std::less< >>
 		requires std::is_constructible_v<Val, Args...> && Impl::MoveAssignmentVal<Val>
-		iterator emplace_sorted(KeyType element, Args&&... args) noexcept
+		iterator emplace_sorted(KeyType element, Compare&& compare = { }, Args&&... args) noexcept
 		{
+			DEBUG_ASSERT(is_sorted(std::forward<Compare>(compare)), "Set must be sorted");
 			ASSERT(!contains(element), "Element already in set!");
 
 			if (element >= m_SparseArr.size())
@@ -454,13 +456,15 @@ namespace Internal
 				m_SparseArr.resize(element + 1, INVALID_INDEX);
 			}
 
-			auto const insertIt = lower_bound(Val{ std::forward<Args>(args)... });
+			Val const value{ std::forward<Args>(args)... };
+
+			auto const insertIt = lower_bound(value, std::forward<Compare>(compare));
 			KeyType const denseIndex = static_cast<KeyType>(std::distance(m_PackedValArr.begin(), insertIt));
 
 			m_DenseArr.insert(m_DenseArr.begin() + denseIndex, element);
 			m_SparseArr[element] = denseIndex;
 
-			m_PackedValArr.insert(insertIt, std::forward<Args>(args)...);
+			m_PackedValArr.insert(insertIt, std::move(value));
 
 			for (KeyType i = denseIndex + 1; i < m_DenseArr.size(); ++i)
 			{
@@ -546,14 +550,14 @@ namespace Internal
 	
 	private:
 		template <Impl::Compare<Val> Compare = std::less< >>
-		iterator lower_bound(const Val& value, Compare compare = { }) noexcept
+		iterator lower_bound(const Val& value, Compare&& compare = { }) noexcept
 		{
-			return std::lower_bound(m_PackedValArr.begin(), m_PackedValArr.end(), value, std::move(compare));
+			return std::lower_bound(m_PackedValArr.begin(), m_PackedValArr.end(), value, std::forward<Compare>(compare));
 		}
 		template <Impl::Compare<Val> Compare = std::less< >>
-		const_iterator lower_bound(const Val& value, Compare compare = { }) const noexcept
+		const_iterator lower_bound(const Val& value, Compare&& compare = { }) const noexcept
 		{
-			return std::lower_bound(m_PackedValArr.begin(), m_PackedValArr.end(), value, std::move(compare));
+			return std::lower_bound(m_PackedValArr.begin(), m_PackedValArr.end(), value, std::forward<Compare>(compare));
 		}
 	};
 }

@@ -430,7 +430,8 @@ void TestSorting()
     }
     std::cout << "\n\n";
 
-    emplSet.emplace_sorted(11,6);
+    std::less<> compare{};
+    emplSet.emplace_sorted(11, compare, 6);
 
     for (auto it = emplSet.begin(); it != emplSet.end(); ++it)
     {
