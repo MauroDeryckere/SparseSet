@@ -474,15 +474,15 @@ namespace Internal
 			return m_PackedValArr.begin() + denseIndex;
 		}
 
-		template<typename... Args>
+		template<typename... Args, Impl::Compare<Val> Compare = std::less< >>
 		requires std::is_constructible_v<Val, Args...>&& Impl::MoveAssignmentVal<Val>
-		std::pair<iterator, bool> try_emplace_sorted(KeyType element, Args&&... args) noexcept
+		std::pair<iterator, bool> try_emplace_sorted(KeyType element, Compare&& compare = { }, Args&&... args) noexcept
 		{
 			if (contains(element))
 			{
 				return { m_PackedValArr.begin() + m_SparseArr[element], false };
 			}
-			return { emplace_sorted(element, std::forward<Args>(args)...), true };
+			return { emplace_sorted(element, std::forward<Compare>(compare), std::forward<Args>(args)...), true };
 		}
 
 	private:
